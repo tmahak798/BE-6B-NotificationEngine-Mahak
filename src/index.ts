@@ -1,4 +1,6 @@
 import { createTopics } from './events/kafka-topics';
+import { publishEvent } from './events/event-producer';
+
 import { producer } from './config/kafka';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -22,6 +24,26 @@ app.get('/health', async () => {
     database: 'connected',
     db_time: dbResult.rows[0].now,
   };
+});
+
+
+// Event ingestion endpoint - this is how external systems send events
+app.post('/api/v1/events', async (request, reply) => {
+  const result = await publishEvent(request.body);
+
+  if (!result.success) {
+    return reply.status(400).send({
+      error: 'EVENT_PUBLISH_FAILED',
+      message: result.error,
+    });
+  }
+
+  return reply.status(202).send({
+    status: 'ACCEPTED',
+    topic: result.topic,
+    partition: result.partition,
+    offset: result.offset,
+  });
 });
 
 // Start server
