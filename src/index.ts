@@ -1,3 +1,5 @@
+import { createTopics } from './events/kafka-topics';
+import { producer } from './config/kafka';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -25,6 +27,14 @@ app.get('/health', async () => {
 // Start server
 const start = async () => {
   try {
+    // Connect Kafka producer
+    await producer.connect();
+    console.log('Kafka producer connected');
+
+    // Create topics if they dont exist
+    await createTopics();
+
+    // Start HTTP server
     await app.listen({ port: 3000, host: '0.0.0.0' });
     console.log('Notification Engine running on port 3000');
   } catch (err) {
