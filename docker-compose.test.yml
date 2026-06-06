@@ -1,0 +1,18 @@
+version: '3.9'
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: notification_engine_test
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notificationengine123
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '5433:5432'
+
+  redis-test:
+    image: redis:7-alpine
+    command: redis-server --requirepass redis123
+    ports:
+      - '6380:6379'
