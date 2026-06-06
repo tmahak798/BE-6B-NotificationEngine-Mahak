@@ -5,6 +5,8 @@ import { enrichEvent } from '../notifications/engine/enrichment-service';
 import { shouldSendDespiteDnd } from '../compliance/dnd/dnd-service';
 import { checkFrequencyCap } from '../compliance/frequency-cap/frequency-cap-service';
 import { shouldHoldForQuietHours } from '../compliance/quiet-hours/quiet-hours-service';
+import { determineChannels } from '../notifications/routing/channel-router';
+import { renderNotification } from '../templates/engine/notification-renderer';
 
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
   console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
@@ -48,8 +50,17 @@ async function processEvent(event: ValidatedEvent, topic: string): Promise<void>
     console.log(`✅ Event ${event.event_type} cleared all compliance checks - ready for delivery`);
   }
 
-  // TODO: Step 5 - Route to delivery channel
-  // TODO: Step 6 - Update notification state
+// Step 5 - Determine channels
+  const routingDecision = determineChannels(enrichedEvent);
+  console.log(`Routing to channels: ${routingDecision.channels.join(', ')} - ${routingDecision.reason}`);
+
+  // Step 6 - Render templates for each channel
+  for (const channel of routingDecision.channels) {
+    const rendered = renderNotification(enrichedEvent, channel);
+    if (rendered) {
+      console.log(`[${channel.toUpperCase()}] ${rendered.content}`);
+    }
+  }  // TODO: Step 6 - Update notification state
 }
 
 export async function startCriticalConsumer(): Promise<void> {
