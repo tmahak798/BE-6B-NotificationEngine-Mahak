@@ -7,6 +7,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import pool from './config/database';
 import { initDeliveryProviders } from './delivery/delivery-service';
+import { metrics } from './analytics/metrics-service';
 
 const app = Fastify({ logger: true });
 
@@ -21,6 +22,21 @@ app.get('/health', async () => {
     timestamp: new Date().toISOString(),
     database: 'connected',
     db_time: dbResult.rows[0].now,
+  };
+});
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (request, reply) => {
+  reply.header('Content-Type', 'text/plain');
+  return metrics.format();
+});
+
+// Circuit breaker status
+app.get('/api/v1/health/providers', async () => {
+  const { circuitBreakers } = await import('./delivery/circuit-breaker/circuit-breaker');
+  return {
+    providers: Object.entries(circuitBreakers).map(([name, cb]) => cb.getStats()),
+    timestamp: new Date().toISOString(),
   };
 });
 
@@ -67,14 +83,7 @@ app.get('/api/v1/notifications/:notificationId', async (request, reply) => {
     state_history: stateHistory.rows,
   };
 });
-// Circuit breaker status
-app.get('/api/v1/health/providers', async () => {
-  const { circuitBreakers } = await import('./delivery/circuit-breaker/circuit-breaker');
-  return {
-    providers: Object.entries(circuitBreakers).map(([name, cb]) => cb.getStats()),
-    timestamp: new Date().toISOString(),
-  };
-});
+
 // Get all notifications for a user
 app.get('/api/v1/users/:userId/notifications', async (request, reply) => {
   const { userId } = request.params as { userId: string };
@@ -89,6 +98,44 @@ app.get('/api/v1/users/:userId/notifications', async (request, reply) => {
   );
 
   return { notifications: result.rows, total: result.rows.length };
+});
+
+// User preferences API
+app.get('/api/v1/users/:userId/preferences', async (request, reply) => {
+  const { userId } = request.params as { userId: string };
+
+  const result = await pool.query(
+    `SELECT * FROM user_preferences WHERE user_id = $1`,
+    [userId]
+  );
+
+  return { user_id: userId, preferences: result.rows };
+});
+
+// Update user preferences
+app.put('/api/v1/users/:userId/preferences', async (request, reply) => {
+  const { userId } = request.params as { userId: string };
+  const { category, channels, digest_mode } = request.body as {
+    category: string;
+    channels: Record<string, boolean>;
+    digest_mode: string;
+  };
+
+  for (const [channel, enabled] of Object.entries(channels)) {
+    await pool.query(
+      `INSERT INTO user_preferences 
+       (user_id, event_category, channel, enabled, digest_mode)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE SET enabled = $4, digest_mode = $5, updated_at = NOW()`,
+      [userId, category, channel, enabled, digest_mode]
+    );
+  }
+
+  return {
+    status: 'updated',
+    category,
+    updated_at: new Date().toISOString(),
+  };
 });
 
 // Analytics - delivery rates
@@ -128,18 +175,6 @@ app.get('/api/v1/dlq', async (request, reply) => {
   const { getDlqEntries } = await import('./delivery/retry/dlq-service');
   const entries = await getDlqEntries();
   return { entries, total: entries.length };
-});
-
-// User preferences API
-app.get('/api/v1/users/:userId/preferences', async (request, reply) => {
-  const { userId } = request.params as { userId: string };
-
-  const result = await pool.query(
-    `SELECT * FROM user_preferences WHERE user_id = $1`,
-    [userId]
-  );
-
-  return { user_id: userId, preferences: result.rows };
 });
 
 // Start server
