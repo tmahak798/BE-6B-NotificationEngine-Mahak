@@ -6,21 +6,37 @@ import { ValidatedEvent } from './validators/event-validator';
 // For now it just logs - we'll add routing logic here soon
 import { enrichEvent } from '../notifications/engine/enrichment-service';
 
+import { shouldSendDespiteDnd } from '../compliance/dnd/dnd-service';
+import { checkFrequencyCap } from '../compliance/frequency-cap/frequency-cap-service';
+
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
   console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
 
   // Step 1 - Enrich with user data
   const enrichedEvent = await enrichEvent(event);
-  
   if (!enrichedEvent) {
     console.error(`Could not enrich event ${event.event_id} - user not found`);
     return;
   }
+  console.log(`Enriched for user: ${enrichedEvent.user.name}, language: ${enrichedEvent.user.language}`);
 
-  console.log(`Enriched event for user: ${enrichedEvent.user.name}, language: ${enrichedEvent.user.language}`);
+  // Step 2 - Check DND (for SMS channel)
+  const dndCheck = shouldSendDespiteDnd(
+    event.event_type,
+    enrichedEvent.user.dnd_status,
+    'sms'
+  );
+  console.log(`DND check: ${dndCheck.allowed ? 'ALLOWED' : 'BLOCKED'} - ${dndCheck.reason}`);
 
-  // TODO: Step 2 - Check DND status
-  // TODO: Step 3 - Check frequency caps
+  // Step 3 - Check frequency cap
+  const capCheck = await checkFrequencyCap(
+    event.user_id,
+    event.event_type,
+    'sms',
+    event.priority
+  );
+  console.log(`Frequency cap: ${capCheck.allowed ? 'ALLOWED' : 'BLOCKED'} - ${capCheck.reason}`);
+
   // TODO: Step 4 - Route to delivery channel
   // TODO: Step 5 - Update notification state
 }
