@@ -4,10 +4,21 @@ import { ValidatedEvent } from './validators/event-validator';
 
 // This function processes each event after it comes off the Kafka belt
 // For now it just logs - we'll add routing logic here soon
+import { enrichEvent } from '../notifications/engine/enrichment-service';
+
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
-  console.log(`Processing event: ${event.event_type} for user: ${event.user_id} from topic: ${topic}`);
+  console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
+
+  // Step 1 - Enrich with user data
+  const enrichedEvent = await enrichEvent(event);
   
-  // TODO: Step 1 - Enrich with user data
+  if (!enrichedEvent) {
+    console.error(`Could not enrich event ${event.event_id} - user not found`);
+    return;
+  }
+
+  console.log(`Enriched event for user: ${enrichedEvent.user.name}, language: ${enrichedEvent.user.language}`);
+
   // TODO: Step 2 - Check DND status
   // TODO: Step 3 - Check frequency caps
   // TODO: Step 4 - Route to delivery channel
