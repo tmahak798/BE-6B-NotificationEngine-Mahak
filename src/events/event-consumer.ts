@@ -8,6 +8,8 @@ import { shouldHoldForQuietHours } from '../compliance/quiet-hours/quiet-hours-s
 import { determineChannels } from '../notifications/routing/channel-router';
 import { renderNotification } from '../templates/engine/notification-renderer';
 import { deliverNotification } from '../delivery/delivery-service';
+import { createNotificationRecord, transitionState } from '../notifications/state-machine/state-machine';
+import { NotificationStatus } from '../notifications/state-machine/notification-states';
 
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
   console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
@@ -20,7 +22,7 @@ async function processEvent(event: ValidatedEvent, topic: string): Promise<void>
   }
   console.log(`Enriched for user: ${enrichedEvent.user.name}, language: ${enrichedEvent.user.language}`);
 
-  // Step 2 - Check DND (for SMS channel)
+  // Step 2 - Check DND
   const dndCheck = shouldSendDespiteDnd(
     event.event_type,
     enrichedEvent.user.dnd_status,
@@ -46,12 +48,14 @@ async function processEvent(event: ValidatedEvent, topic: string): Promise<void>
   );
   console.log(`Quiet hours: ${quietCheck.hold ? 'HELD' : 'ALLOWED'} - ${quietCheck.reason}`);
 
-  // If all checks pass - ready for delivery
-  if (dndCheck.allowed && capCheck.allowed && !quietCheck.hold) {
-    console.log(`✅ Event ${event.event_type} cleared all compliance checks - ready for delivery`);
+  if (!dndCheck.allowed || !capCheck.allowed || quietCheck.hold) {
+    console.log(`⛔ Event blocked - not delivering`);
+    return;
   }
 
-// Step 5 - Determine channels
+  console.log(`✅ Event ${event.event_type} cleared all compliance checks - ready for delivery`);
+
+  // Step 5 - Determine channels
   const routingDecision = determineChannels(enrichedEvent);
   console.log(`Routing to: ${routingDecision.channels.join(', ')} - ${routingDecision.reason}`);
 
@@ -59,20 +63,74 @@ async function processEvent(event: ValidatedEvent, topic: string): Promise<void>
   for (const channel of routingDecision.channels) {
     const rendered = renderNotification(enrichedEvent, channel);
     if (!rendered) {
-      console.warn(`No template for ${enrichedEvent.event.event_type}/${channel}`);
+      console.warn(`No template for ${event.event_type}/${channel}`);
       continue;
     }
 
+    // Create notification record in database
+    const notificationId = await createNotificationRecord(
+      event.event_type,
+      event.event_id,
+      event.user_id,
+      channel,
+      event.priority,
+      `${event.event_type}-v1`,
+      event.payload as Record<string, unknown>,
+    );
+
+    // Transition to ENRICHED
+    await transitionState(
+      notificationId,
+      NotificationStatus.CREATED,
+      NotificationStatus.ENRICHED,
+      'enrichment_worker',
+    );
+
+    // Transition to ROUTED
+    await transitionState(
+      notificationId,
+      NotificationStatus.ENRICHED,
+      NotificationStatus.ROUTED,
+      'routing_engine',
+      { channel, reason: routingDecision.reason },
+    );
+
     console.log(`[${channel.toUpperCase()}] Rendered: ${rendered.content}`);
 
+    // Deliver
     const result = await deliverNotification(enrichedEvent, channel, rendered);
-    
+
     if (result.success) {
+      // Transition to SENT then DELIVERED
+      await transitionState(
+        notificationId,
+        NotificationStatus.ROUTED,
+        NotificationStatus.SENT,
+        `${channel}_delivery_worker`,
+        { messageId: result.messageId },
+      );
+
+      await transitionState(
+        notificationId,
+        NotificationStatus.SENT,
+        NotificationStatus.DELIVERED,
+        `${channel}_delivery_worker`,
+        { messageId: result.messageId },
+      );
+
       console.log(`✅ [${channel.toUpperCase()}] Delivered! ID: ${result.messageId}`);
       if (result.previewUrl) {
         console.log(`📧 Email preview: ${result.previewUrl}`);
       }
     } else {
+      // Transition to FAILED
+      await transitionState(
+        notificationId,
+        NotificationStatus.ROUTED,
+        NotificationStatus.FAILED,
+        `${channel}_delivery_worker`,
+        { error: result.error },
+      );
       console.error(`❌ [${channel.toUpperCase()}] Failed: ${result.error}`);
     }
   }
