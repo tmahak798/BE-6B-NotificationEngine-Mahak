@@ -8,6 +8,8 @@ import { Channel } from '../notifications/routing/channel-router';
 import { getRetryDecision } from './retry/retry-service';
 import { moveToDlq } from './retry/dlq-service';
 import { circuitBreakers } from './circuit-breaker/circuit-breaker';
+import { sendWhatsApp } from './providers/whatsapp-provider';
+import { sendInAppNotification } from './providers/inapp-provider';
 
 export interface DeliveryResult {
   channel: Channel;
@@ -50,6 +52,27 @@ export async function deliverWithRetry(
             text: rendered.content,
           })
         );
+        result = { channel, ...r };
+        break;
+      
+      }
+      case 'whatsapp': {
+        const r = await circuitBreakers.whatsapp.execute(() =>
+          sendWhatsApp({
+            to: user.phone,
+            message: rendered.content,
+          })
+        );
+        result = { channel, ...r };
+        break;
+      }
+      case 'in_app': {
+        const r = await sendInAppNotification({
+          userId: user.id,
+          title: 'WealthBridge Alert',
+          body: rendered.content,
+          eventType: event.event_type,
+        });
         result = { channel, ...r };
         break;
       }
