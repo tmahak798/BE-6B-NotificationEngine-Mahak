@@ -7,6 +7,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import pool from './config/database';
+import { initDeliveryProviders } from './delivery/delivery-service';
 
 const app = Fastify({
   logger: true,
@@ -56,7 +57,7 @@ const start = async () => {
 
     // Create topics if they dont exist
     await createTopics();
-
+    await initDeliveryProviders();
     // Start consumers
     await startCriticalConsumer();
     await startStandardConsumer();

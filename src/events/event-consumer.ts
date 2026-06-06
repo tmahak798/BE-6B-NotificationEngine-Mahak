@@ -7,6 +7,7 @@ import { checkFrequencyCap } from '../compliance/frequency-cap/frequency-cap-ser
 import { shouldHoldForQuietHours } from '../compliance/quiet-hours/quiet-hours-service';
 import { determineChannels } from '../notifications/routing/channel-router';
 import { renderNotification } from '../templates/engine/notification-renderer';
+import { deliverNotification } from '../delivery/delivery-service';
 
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
   console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
@@ -52,15 +53,29 @@ async function processEvent(event: ValidatedEvent, topic: string): Promise<void>
 
 // Step 5 - Determine channels
   const routingDecision = determineChannels(enrichedEvent);
-  console.log(`Routing to channels: ${routingDecision.channels.join(', ')} - ${routingDecision.reason}`);
+  console.log(`Routing to: ${routingDecision.channels.join(', ')} - ${routingDecision.reason}`);
 
-  // Step 6 - Render templates for each channel
+  // Step 6 - Render and deliver to each channel
   for (const channel of routingDecision.channels) {
     const rendered = renderNotification(enrichedEvent, channel);
-    if (rendered) {
-      console.log(`[${channel.toUpperCase()}] ${rendered.content}`);
+    if (!rendered) {
+      console.warn(`No template for ${enrichedEvent.event.event_type}/${channel}`);
+      continue;
     }
-  }  // TODO: Step 6 - Update notification state
+
+    console.log(`[${channel.toUpperCase()}] Rendered: ${rendered.content}`);
+
+    const result = await deliverNotification(enrichedEvent, channel, rendered);
+    
+    if (result.success) {
+      console.log(`✅ [${channel.toUpperCase()}] Delivered! ID: ${result.messageId}`);
+      if (result.previewUrl) {
+        console.log(`📧 Email preview: ${result.previewUrl}`);
+      }
+    } else {
+      console.error(`❌ [${channel.toUpperCase()}] Failed: ${result.error}`);
+    }
+  }
 }
 
 export async function startCriticalConsumer(): Promise<void> {
