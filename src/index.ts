@@ -1,3 +1,4 @@
+import { startCriticalConsumer, startStandardConsumer, stopConsumers } from './events/event-consumer';
 import { createTopics } from './events/kafka-topics';
 import { publishEvent } from './events/event-producer';
 
@@ -56,13 +57,26 @@ const start = async () => {
     // Create topics if they dont exist
     await createTopics();
 
+    // Start consumers
+    await startCriticalConsumer();
+    await startStandardConsumer();
+
     // Start HTTP server
     await app.listen({ port: 3000, host: '0.0.0.0' });
     console.log('Notification Engine running on port 3000');
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      console.log('Shutting down gracefully...');
+      await stopConsumers();
+      await producer.disconnect();
+      await app.close();
+      process.exit(0);
+    });
+
   } catch (err) {
     app.log.error(err);
     process.exit(1);
   }
 };
-
 start();

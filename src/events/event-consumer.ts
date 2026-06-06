@@ -1,0 +1,78 @@
+import { criticalConsumer, standardConsumer } from '../config/kafka';
+import { TOPICS } from './kafka-topics';
+import { ValidatedEvent } from './validators/event-validator';
+
+// This function processes each event after it comes off the Kafka belt
+// For now it just logs - we'll add routing logic here soon
+async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
+  console.log(`Processing event: ${event.event_type} for user: ${event.user_id} from topic: ${topic}`);
+  
+  // TODO: Step 1 - Enrich with user data
+  // TODO: Step 2 - Check DND status
+  // TODO: Step 3 - Check frequency caps
+  // TODO: Step 4 - Route to delivery channel
+  // TODO: Step 5 - Update notification state
+}
+
+// Starts the critical consumer - listens to notification-critical topic
+// This handles margin calls, circuit breakers - must be fast
+export async function startCriticalConsumer(): Promise<void> {
+  await criticalConsumer.connect();
+  console.log('Critical consumer connected');
+
+  await criticalConsumer.subscribe({
+    topic: TOPICS.CRITICAL,
+    fromBeginning: false, // only process new events, not old ones
+  });
+
+  await criticalConsumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      try {
+        if (!message.value) return;
+
+        const event: ValidatedEvent = JSON.parse(message.value.toString());
+        console.log(`[CRITICAL] Received from partition ${partition}, offset ${message.offset}`);
+        
+        await processEvent(event, topic);
+      } catch (error) {
+        console.error('[CRITICAL] Error processing message:', error);
+        // Don't throw - we don't want to crash the consumer
+        // Failed events will be handled by DLQ later
+      }
+    },
+  });
+}
+
+// Starts the standard consumer - listens to notification-events topic
+// This handles all non-critical events
+export async function startStandardConsumer(): Promise<void> {
+  await standardConsumer.connect();
+  console.log('Standard consumer connected');
+
+  await standardConsumer.subscribe({
+    topic: TOPICS.EVENTS,
+    fromBeginning: false,
+  });
+
+  await standardConsumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      try {
+        if (!message.value) return;
+
+        const event: ValidatedEvent = JSON.parse(message.value.toString());
+        console.log(`[STANDARD] Received from partition ${partition}, offset ${message.offset}`);
+        
+        await processEvent(event, topic);
+      } catch (error) {
+        console.error('[STANDARD] Error processing message:', error);
+      }
+    },
+  });
+}
+
+// Graceful shutdown - drain in-flight messages before stopping
+export async function stopConsumers(): Promise<void> {
+  await criticalConsumer.disconnect();
+  await standardConsumer.disconnect();
+  console.log('Consumers disconnected');
+}
