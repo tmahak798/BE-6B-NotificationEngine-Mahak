@@ -20,7 +20,7 @@ export enum NotificationStatus {
 export const VALID_TRANSITIONS: Record<NotificationStatus, NotificationStatus[]> = {
   [NotificationStatus.CREATED]: [NotificationStatus.ENRICHED, NotificationStatus.FAILED],
   [NotificationStatus.ENRICHED]: [NotificationStatus.ROUTED, NotificationStatus.FAILED],
-  [NotificationStatus.ROUTED]: [NotificationStatus.QUEUED, NotificationStatus.CAPPED, NotificationStatus.DND, NotificationStatus.QUIET, NotificationStatus.FAILED],
+  [NotificationStatus.ROUTED]: [NotificationStatus.QUEUED, NotificationStatus.SENT, NotificationStatus.CAPPED, NotificationStatus.DND, NotificationStatus.QUIET, NotificationStatus.FAILED],
   [NotificationStatus.QUEUED]: [NotificationStatus.SENT, NotificationStatus.FAILED],
   [NotificationStatus.SENT]: [NotificationStatus.DELIVERED, NotificationStatus.FAILED, NotificationStatus.RETRYING],
   [NotificationStatus.DELIVERED]: [NotificationStatus.READ],
