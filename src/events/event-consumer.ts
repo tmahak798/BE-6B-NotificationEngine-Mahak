@@ -10,10 +10,21 @@ import { renderNotification } from '../templates/engine/notification-renderer';
 import { deliverNotification } from '../delivery/delivery-service';
 import { createNotificationRecord, transitionState } from '../notifications/state-machine/state-machine';
 import { NotificationStatus } from '../notifications/state-machine/notification-states';
+import { isDuplicateEvent } from './deduplication-service';
 
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
   console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
+// Step 0 - Deduplication check
+  const isDuplicate = await isDuplicateEvent(
+    event.event_type,
+    event.user_id,
+    event.idempotency_key,
+  );
 
+  if (isDuplicate) {
+    console.log(`🔄 Duplicate event ${event.event_id} skipped`);
+    return;
+  }
   // Step 1 - Enrich with user data
   const enrichedEvent = await enrichEvent(event);
   if (!enrichedEvent) {
