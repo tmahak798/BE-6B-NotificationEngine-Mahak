@@ -1,13 +1,10 @@
 import { criticalConsumer, standardConsumer } from '../config/kafka';
 import { TOPICS } from './kafka-topics';
 import { ValidatedEvent } from './validators/event-validator';
-
-// This function processes each event after it comes off the Kafka belt
-// For now it just logs - we'll add routing logic here soon
 import { enrichEvent } from '../notifications/engine/enrichment-service';
-
 import { shouldSendDespiteDnd } from '../compliance/dnd/dnd-service';
 import { checkFrequencyCap } from '../compliance/frequency-cap/frequency-cap-service';
+import { shouldHoldForQuietHours } from '../compliance/quiet-hours/quiet-hours-service';
 
 async function processEvent(event: ValidatedEvent, topic: string): Promise<void> {
   console.log(`Processing event: ${event.event_type} for user: ${event.user_id}`);
@@ -37,41 +34,47 @@ async function processEvent(event: ValidatedEvent, topic: string): Promise<void>
   );
   console.log(`Frequency cap: ${capCheck.allowed ? 'ALLOWED' : 'BLOCKED'} - ${capCheck.reason}`);
 
-  // TODO: Step 4 - Route to delivery channel
-  // TODO: Step 5 - Update notification state
+  // Step 4 - Check quiet hours
+  const quietCheck = shouldHoldForQuietHours(
+    event.event_type,
+    enrichedEvent.user.quiet_hours_start,
+    enrichedEvent.user.quiet_hours_end,
+    enrichedEvent.user.timezone,
+  );
+  console.log(`Quiet hours: ${quietCheck.hold ? 'HELD' : 'ALLOWED'} - ${quietCheck.reason}`);
+
+  // If all checks pass - ready for delivery
+  if (dndCheck.allowed && capCheck.allowed && !quietCheck.hold) {
+    console.log(`✅ Event ${event.event_type} cleared all compliance checks - ready for delivery`);
+  }
+
+  // TODO: Step 5 - Route to delivery channel
+  // TODO: Step 6 - Update notification state
 }
 
-// Starts the critical consumer - listens to notification-critical topic
-// This handles margin calls, circuit breakers - must be fast
 export async function startCriticalConsumer(): Promise<void> {
   await criticalConsumer.connect();
   console.log('Critical consumer connected');
 
   await criticalConsumer.subscribe({
     topic: TOPICS.CRITICAL,
-    fromBeginning: false, // only process new events, not old ones
+    fromBeginning: false,
   });
 
   await criticalConsumer.run({
     eachMessage: async ({ topic, partition, message }) => {
       try {
         if (!message.value) return;
-
         const event: ValidatedEvent = JSON.parse(message.value.toString());
         console.log(`[CRITICAL] Received from partition ${partition}, offset ${message.offset}`);
-        
         await processEvent(event, topic);
       } catch (error) {
         console.error('[CRITICAL] Error processing message:', error);
-        // Don't throw - we don't want to crash the consumer
-        // Failed events will be handled by DLQ later
       }
     },
   });
 }
 
-// Starts the standard consumer - listens to notification-events topic
-// This handles all non-critical events
 export async function startStandardConsumer(): Promise<void> {
   await standardConsumer.connect();
   console.log('Standard consumer connected');
@@ -85,10 +88,8 @@ export async function startStandardConsumer(): Promise<void> {
     eachMessage: async ({ topic, partition, message }) => {
       try {
         if (!message.value) return;
-
         const event: ValidatedEvent = JSON.parse(message.value.toString());
         console.log(`[STANDARD] Received from partition ${partition}, offset ${message.offset}`);
-        
         await processEvent(event, topic);
       } catch (error) {
         console.error('[STANDARD] Error processing message:', error);
@@ -97,7 +98,6 @@ export async function startStandardConsumer(): Promise<void> {
   });
 }
 
-// Graceful shutdown - drain in-flight messages before stopping
 export async function stopConsumers(): Promise<void> {
   await criticalConsumer.disconnect();
   await standardConsumer.disconnect();
