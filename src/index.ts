@@ -67,7 +67,14 @@ app.get('/api/v1/notifications/:notificationId', async (request, reply) => {
     state_history: stateHistory.rows,
   };
 });
-
+// Circuit breaker status
+app.get('/api/v1/health/providers', async () => {
+  const { circuitBreakers } = await import('./delivery/circuit-breaker/circuit-breaker');
+  return {
+    providers: Object.entries(circuitBreakers).map(([name, cb]) => cb.getStats()),
+    timestamp: new Date().toISOString(),
+  };
+});
 // Get all notifications for a user
 app.get('/api/v1/users/:userId/notifications', async (request, reply) => {
   const { userId } = request.params as { userId: string };

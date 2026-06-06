@@ -7,6 +7,7 @@ import { RenderedNotification } from '../templates/engine/notification-renderer'
 import { Channel } from '../notifications/routing/channel-router';
 import { getRetryDecision } from './retry/retry-service';
 import { moveToDlq } from './retry/dlq-service';
+import { circuitBreakers } from './circuit-breaker/circuit-breaker';
 
 export interface DeliveryResult {
   channel: Channel;
@@ -34,37 +35,39 @@ export async function deliverWithRetry(
   let result: DeliveryResult;
 
   switch (channel) {
-    case 'sms': {
-      const r = await sendSms({
-        to: user.phone,
-        message: rendered.content,
-        senderId: 'WLTHBR',
-      });
-      result = { channel, ...r };
-      break;
+      case 'sms': {
+        const r = await circuitBreakers.sms_msg91.execute(() =>
+          sendSms({ to: user.phone, message: rendered.content, senderId: 'WLTHBR' })
+        );
+        result = { channel, ...r };
+        break;
+      }
+      case 'email': {
+        const r = await circuitBreakers.email.execute(() =>
+          sendEmail({
+            to: user.email,
+            subject: `WealthBridge Alert: ${event.event_type}`,
+            text: rendered.content,
+          })
+        );
+        result = { channel, ...r };
+        break;
+      }
+      case 'push': {
+        const r = await circuitBreakers.push_fcm.execute(() =>
+          sendPushNotification({
+            userId: user.id,
+            title: 'WealthBridge Alert',
+            body: rendered.content,
+            data: { event_type: event.event_type },
+          })
+        );
+        result = { channel, ...r };
+        break;
+      }
+      default:
+        result = { channel, success: false, error: `Channel ${channel} not implemented` };
     }
-    case 'email': {
-      const r = await sendEmail({
-        to: user.email,
-        subject: `WealthBridge Alert: ${event.event_type}`,
-        text: rendered.content,
-      });
-      result = { channel, ...r };
-      break;
-    }
-    case 'push': {
-      const r = await sendPushNotification({
-        userId: user.id,
-        title: 'WealthBridge Alert',
-        body: rendered.content,
-        data: { event_type: event.event_type },
-      });
-      result = { channel, ...r };
-      break;
-    }
-    default:
-      result = { channel, success: false, error: `Channel ${channel} not implemented` };
-  }
 
   // If successful, return
   if (result.success) {
