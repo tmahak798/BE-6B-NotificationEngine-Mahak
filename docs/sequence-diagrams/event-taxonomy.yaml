@@ -1,0 +1,218 @@
+# Event Taxonomy - BE-6B Notification Engine
+# 25+ Financial Event Types
+
+categories:
+  - name: Transaction Events
+    prefix: TXNX
+    events:
+      - code: TXNX-001
+        name: Buy Order Executed
+        urgency: HIGH
+        regulatory: SEBI Mandatory
+        channels: [sms, push, email]
+        max_latency_seconds: 30
+        priority: 2
+
+      - code: TXNX-002
+        name: Sell Order Executed
+        urgency: HIGH
+        regulatory: SEBI Mandatory
+        channels: [sms, push, email]
+        max_latency_seconds: 30
+        priority: 2
+
+      - code: TXNX-003
+        name: Order Rejected
+        urgency: HIGH
+        regulatory: Required
+        channels: [push, sms]
+        max_latency_seconds: 15
+        priority: 2
+
+      - code: TXNX-004
+        name: Dividend Credited
+        urgency: MEDIUM
+        regulatory: Informational
+        channels: [email, push]
+        max_latency_seconds: 3600
+        priority: 3
+
+      - code: TXNX-005
+        name: Funds Deposited
+        urgency: HIGH
+        regulatory: Banking Regulation
+        channels: [sms, push]
+        max_latency_seconds: 60
+        priority: 2
+
+  - name: Risk and Margin Events
+    prefix: RISK
+    events:
+      - code: RISK-001
+        name: Margin Call Warning
+        urgency: CRITICAL
+        regulatory: SEBI Mandatory
+        channels: [sms, push, call]
+        max_latency_seconds: 10
+        priority: 1
+
+      - code: RISK-002
+        name: Margin Shortfall
+        urgency: CRITICAL
+        regulatory: SEBI Mandatory
+        channels: [sms, push, email, call]
+        max_latency_seconds: 5
+        priority: 1
+
+      - code: RISK-003
+        name: Position Squared Off
+        urgency: CRITICAL
+        regulatory: SEBI Mandatory
+        channels: [sms, push, email]
+        max_latency_seconds: 15
+        priority: 1
+
+      - code: RISK-004
+        name: Portfolio Risk Alert
+        urgency: HIGH
+        regulatory: Advisory
+        channels: [push, email]
+        max_latency_seconds: 300
+        priority: 2
+
+      - code: RISK-005
+        name: Concentration Alert
+        urgency: MEDIUM
+        regulatory: Advisory
+        channels: [email, in_app]
+        max_latency_seconds: 3600
+        priority: 3
+
+  - name: SIP and Investment Events
+    prefix: SIPX
+    events:
+      - code: SIPX-001
+        name: SIP Due Reminder
+        urgency: MEDIUM
+        regulatory: Best Practice
+        channels: [push, whatsapp]
+        max_latency_seconds: 259200
+        priority: 3
+
+      - code: SIPX-002
+        name: SIP Executed
+        urgency: HIGH
+        regulatory: AMFI Required
+        channels: [sms, email]
+        max_latency_seconds: 7200
+        priority: 2
+
+      - code: SIPX-003
+        name: SIP Failed
+        urgency: HIGH
+        regulatory: Required
+        channels: [sms, push, email]
+        max_latency_seconds: 1800
+        priority: 2
+
+      - code: SIPX-004
+        name: SIP Step-Up Reminder
+        urgency: LOW
+        regulatory: Advisory
+        channels: [email, in_app]
+        max_latency_seconds: 86400
+        priority: 5
+
+      - code: SIPX-005
+        name: Goal Milestone Reached
+        urgency: LOW
+        regulatory: Engagement
+        channels: [push, in_app]
+        max_latency_seconds: 14400
+        priority: 5
+
+  - name: Market and Price Events
+    prefix: MKTX
+    events:
+      - code: MKTX-001
+        name: Price Alert Triggered
+        urgency: HIGH
+        regulatory: User-Set
+        channels: [push, sms]
+        max_latency_seconds: 15
+        priority: 2
+
+      - code: MKTX-002
+        name: Circuit Breaker Hit
+        urgency: CRITICAL
+        regulatory: Exchange Mandate
+        channels: [push, sms]
+        max_latency_seconds: 10
+        priority: 1
+
+      - code: MKTX-003
+        name: Market Open/Close
+        urgency: LOW
+        regulatory: Engagement
+        channels: [push]
+        max_latency_seconds: 0
+        priority: 5
+
+      - code: MKTX-004
+        name: 52-Week High/Low
+        urgency: MEDIUM
+        regulatory: Advisory
+        channels: [push, email]
+        max_latency_seconds: 1800
+        priority: 3
+
+      - code: MKTX-005
+        name: Earnings Announcement
+        urgency: MEDIUM
+        regulatory: Advisory
+        channels: [email, in_app]
+        max_latency_seconds: 86400
+        priority: 3
+
+  - name: Regulatory and Compliance Events
+    prefix: REGX
+    events:
+      - code: REGX-001
+        name: KYC Expiry Warning
+        urgency: HIGH
+        regulatory: SEBI Mandatory
+        channels: [sms, email, push]
+        max_latency_seconds: 86400
+        priority: 2
+
+      - code: REGX-002
+        name: Nominee Update Reminder
+        urgency: MEDIUM
+        regulatory: SEBI Circular
+        channels: [email, push]
+        max_latency_seconds: 604800
+        priority: 3
+
+      - code: REGX-003
+        name: Contract Note Generated
+        urgency: HIGH
+        regulatory: SEBI Mandatory
+        channels: [email]
+        max_latency_seconds: 86400
+        priority: 2
+
+      - code: REGX-004
+        name: Tax Statement Available
+        urgency: MEDIUM
+        regulatory: IT Act Required
+        channels: [email, in_app]
+        max_latency_seconds: 604800
+        priority: 3
+
+      - code: REGX-005
+        name: Regulatory Policy Change
+        urgency: LOW
+        regulatory: Informational
+        channels: [email]
+        max_latency_seconds: 86400
+        priority: 5
